@@ -31,20 +31,37 @@ async function run() {
     // Database and Collections
     const database = client.db("Medicare");
     const usersCollection = database.collection("user");
+    const doctorsCollection = database.collection("doctors");
 
-    // ==========================================
-    // 📝 আপনার সব API Routes এখানে লিখবেন
-    // ==========================================
 
-    // উদাহরণস্বরূপ Get Users Endpoint:
-    app.get('/users', async (req, res) => {
-      try {
-        const users = await usersCollection.find().toArray();
-        res.send(users);
-      } catch (error) {
-        res.status(500).send({ message: "Error fetching users", error });
+    app.get("/api/users", async (req, res) => {
+      const result = await usersCollection.find().toArray()
+      res.send(result)
+    })
+
+
+    app.get("/api/doctors", async (req, res) => {
+      const query = {}
+
+      if (req.query.doctorId) {
+        query.doctorId = req.query.doctorId;
       }
-    });
+
+      const result = await doctorsCollection.find(query).toArray()
+      res.json(result)
+
+    })
+
+
+    app.post("/api/doctors", async (req, res) => {
+      const doctor = req.body
+      const newDoctor = {
+        ...doctor,
+        createdAt: new Date()
+      }
+      const result = await doctorsCollection.insertOne(newDoctor)
+      res.send(result)
+    })
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
@@ -52,8 +69,8 @@ async function run() {
 
   } catch (error) {
     console.error("MongoDB Connection Error:", error);
-  } 
-  
+  }
+
 }
 
 run().catch(console.dir);
