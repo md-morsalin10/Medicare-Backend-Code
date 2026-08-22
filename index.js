@@ -64,6 +64,15 @@ async function run() {
       res.send(result)
     })
 
+    app.get("/api/schedules", async (req, res) => {
+      const query = {};
+      if (req.query.doctorId) {
+        query.doctorId = req.query.doctorId;
+      }
+      const result = await schedulesCollection.find(query).sort({ date: 1 }).toArray();
+      res.json(result);
+    });
+
     app.post("/api/schedules", async (req, res) => {
       const { doctorId, date, timeSlot, maxPatients, doctorEmail } = req.body;
 
@@ -71,7 +80,6 @@ async function run() {
         return res.status(400).json({ success: false, message: "Missing required fields!" });
       }
 
-      // একই ডাক্তার, একই তারিখ এবং একই টাইম স্লট আগে আছে কি না চেক করা
       const existingSchedule = await schedulesCollection.findOne({
         doctorId: doctorId,
         date: date,
@@ -98,6 +106,85 @@ async function run() {
       const result = await schedulesCollection.insertOne(newSchedule);
       res.json({ success: true, message: "Schedule created successfully!", result });
     });
+
+    // ── Update Schedule by ID ──
+    app.patch("/api/schedules/:id", async (req, res) => {
+      const { id } = req.params;
+      const { date, timeSlot, maxPatients } = req.body;
+
+      if (!ObjectId.isValid(id)) {
+        return res.status(400).json({ success: false, message: "Invalid schedule ID!" });
+      }
+
+      const updateFields = {};
+      if (date) updateFields.date = date;
+      if (timeSlot) updateFields.timeSlot = timeSlot;
+      if (maxPatients) updateFields.maxPatients = Number(maxPatients);
+      updateFields.updatedAt = new Date();
+
+      const result = await schedulesCollection.updateOne(
+        { _id: new ObjectId(id) },
+        { $set: updateFields }
+      );
+
+      if (result.matchedCount === 0) {
+        return res.status(404).json({ success: false, message: "Schedule not found!" });
+      }
+
+      res.json({ success: true, message: "Schedule updated successfully!", result });
+    });
+
+    // ── Delete Schedule by ID ──
+    app.delete("/api/schedules/:id", async (req, res) => {
+      const { id } = req.params;
+
+      if (!ObjectId.isValid(id)) {
+        return res.status(400).json({ success: false, message: "Invalid schedule ID!" });
+      }
+
+      const result = await schedulesCollection.deleteOne({ _id: new ObjectId(id) });
+
+      if (result.deletedCount === 0) {
+        return res.status(404).json({ success: false, message: "Schedule not found!" });
+      }
+
+      res.json({ success: true, message: "Schedule deleted successfully!", result });
+    });
+
+    // ADMIN: Update Doctor Verification Status (Verify / Reject / Pending)
+    app.patch("/api/doctors/verify/:id", async (req, res) => {
+      const { id } = req.params;
+      const { verificationStatus } = req.body;
+
+      if (!ObjectId.isValid(id)) {
+        return res.status(400).json({ success: false, message: "Invalid Doctor ID!" });
+      }
+
+      if (!verificationStatus) {
+        return res.status(400).json({ success: false, message: "verificationStatus is required!" });
+      }
+
+      const result = await doctorsCollection.updateOne(
+        { _id: new ObjectId(id) },
+        {
+          $set: {
+            verificationStatus: verificationStatus,
+            updatedAt: new Date()
+          }
+        }
+      );
+
+      if (result.matchedCount === 0) {
+        return res.status(404).json({ success: false, message: "Doctor not found!" });
+      }
+
+      res.json({
+        success: true,
+        message: `Doctor status updated to ${verificationStatus} successfully!`,
+        result
+      });
+    });
+
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
