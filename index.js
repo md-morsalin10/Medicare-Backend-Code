@@ -53,6 +53,12 @@ async function run() {
 
     })
 
+    app.get("/api/doctors/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await doctorsCollection.findOne(query)
+      res.json(result)
+    })
 
     app.post("/api/doctors", async (req, res) => {
       const doctor = req.body
