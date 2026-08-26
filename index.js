@@ -34,6 +34,7 @@ async function run() {
     const doctorsCollection = database.collection("doctors");
     const schedulesCollection = database.collection("schedules");
     const doctorPaymentsCollection = database.collection("doctorPayments");
+    const prescriptionsCollection = database.collection("prescriptions");
 
 
     app.get("/api/users", async (req, res) => {
@@ -147,7 +148,7 @@ async function run() {
     // ── Update Appointment Booking Status (Accept / Reject) ──
     app.patch("/api/bookings/:id", async (req, res) => {
       const { id } = req.params;
-      const { status } = req.body; // Expecting: "Confirmed" or "Cancelled"
+      const { status } = req.body; 
 
       if (!ObjectId.isValid(id)) {
         return res.status(400).json({ success: false, message: "Invalid Booking ID!" });
@@ -176,6 +177,91 @@ async function run() {
         console.error("Error updating booking status:", error);
         res.status(500).json({ success: false, message: "Internal server error" });
       }
+    });
+
+    // PATCH: Update booking status (Confirmed / Cancelled / Completed)
+    app.patch("/api/bookings/:id", async (req, res) => {
+      const { id } = req.params;
+      const { status } = req.body;
+
+      if (!ObjectId.isValid(id)) {
+        return res.status(400).json({ success: false, message: "Invalid booking ID!" });
+      }
+
+      const result = await doctorPaymentsCollection.updateOne(
+        { _id: new ObjectId(id) },
+        { $set: { status, updatedAt: new Date() } }
+      );
+
+      if (result.matchedCount === 0) {
+        return res.status(404).json({ success: false, message: "Booking not found!" });
+      }
+
+      res.json({ success: true, message: "Booking status updated!", result });
+    });
+
+    // POST: Create a prescription
+    app.post("/api/prescriptions", async (req, res) => {
+      const {
+        appointmentId,
+        doctorId,
+        doctorName,
+        doctorEmail,
+        patientId,
+        patientName,
+        patientEmail,
+        diagnosis,
+        medicines,
+        notes,
+        appointmentDate
+      } = req.body;
+
+      if (!appointmentId || !patientId || !diagnosis) {
+        return res.status(400).json({ success: false, message: "Missing required prescription fields!" });
+      }
+
+      try {
+        const newPrescription = {
+          appointmentId,
+          doctorId,
+          doctorName,
+          doctorEmail,
+          patientId,
+          patientName,
+          patientEmail,
+          diagnosis,
+          medicines: medicines || [],
+          notes: notes || "",
+          appointmentDate: appointmentDate || "",
+          createdAt: new Date()
+        };
+
+        const result = await prescriptionsCollection.insertOne(newPrescription);
+
+        // Also mark the booking as Completed
+        if (ObjectId.isValid(appointmentId)) {
+          await doctorPaymentsCollection.updateOne(
+            { _id: new ObjectId(appointmentId) },
+            { $set: { status: "Completed", updatedAt: new Date() } }
+          );
+        }
+
+        res.json({ success: true, message: "Prescription created successfully!", result });
+      } catch (error) {
+        console.error("Prescription creation error:", error);
+        res.status(500).json({ success: false, message: error.message });
+      }
+    });
+
+    // GET: Fetch prescriptions (by doctorId or patientId)
+    app.get("/api/prescriptions", async (req, res) => {
+      const query = {};
+      if (req.query.doctorId) query.doctorId = req.query.doctorId;
+      if (req.query.patientId) query.patientId = req.query.patientId;
+      if (req.query.appointmentId) query.appointmentId = req.query.appointmentId;
+
+      const result = await prescriptionsCollection.find(query).sort({ createdAt: -1 }).toArray();
+      res.json(result);
     });
 
     app.post("/api/doctors", async (req, res) => {
