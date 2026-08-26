@@ -61,12 +61,31 @@ async function run() {
       res.json(result)
     })
 
+    app.get("/api/bookings", async (req, res) => {
+      const query = {};
+
+      if (req.query.doctorId) {
+        query.doctorId = req.query.doctorId;
+      }
+      if (req.query.patientEmail) {
+        query.patientEmail = req.query.patientEmail;
+      }
+      if (req.query.patientId) {
+        query.patientId = req.query.patientId;
+      }
+
+      const result = await doctorPaymentsCollection.find(query).sort({ createdAt: -1 }).toArray();
+      res.json(result);
+
+    })
+
     app.post("/api/bookings", async (req, res) => {
       const {
         doctorId,
         doctorName,
         doctorEmail,
         doctorFee,
+        doctorImage,
         patientId,
         patientName,
         patientEmail,
@@ -85,7 +104,7 @@ async function run() {
         });
       }
 
-      
+
       if (stripeSessionId) {
         const existingPayment = await doctorPaymentsCollection.findOne({ stripeSessionId });
         if (existingPayment) {
@@ -103,6 +122,7 @@ async function run() {
         doctorName,
         doctorEmail,
         doctorFee: Number(doctorFee),
+        doctorImage,
         patientId,
         patientName,
         patientEmail,
@@ -124,14 +144,119 @@ async function run() {
       });
     });
 
-    app.post("/api/doctors", async (req, res) => {
-      const doctor = req.body
-      const newDoctor = {
-        ...doctor,
-        createdAt: new Date()
+    // ── Update Appointment Booking Status (Accept / Reject) ──
+    app.patch("/api/bookings/:id", async (req, res) => {
+      const { id } = req.params;
+      const { status } = req.body; // Expecting: "Confirmed" or "Cancelled"
+
+      if (!ObjectId.isValid(id)) {
+        return res.status(400).json({ success: false, message: "Invalid Booking ID!" });
       }
-      const result = await doctorsCollection.insertOne(newDoctor)
-      res.send(result)
+
+      if (!status) {
+        return res.status(400).json({ success: false, message: "Status is required!" });
+      }
+
+      try {
+        const result = await doctorPaymentsCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: { status: status, updatedAt: new Date() } }
+        );
+
+        if (result.matchedCount === 0) {
+          return res.status(404).json({ success: false, message: "Booking record not found!" });
+        }
+
+        res.json({
+          success: true,
+          message: `Appointment status updated to ${status} successfully!`,
+          result
+        });
+      } catch (error) {
+        console.error("Error updating booking status:", error);
+        res.status(500).json({ success: false, message: "Internal server error" });
+      }
+    });
+
+    app.post("/api/doctors", async (req, res) => {
+      const doctor = req.body;
+      const { doctorId, ...rest } = doctor;
+
+      if (!doctorId) {
+        return res.status(400).json({ success: false, message: "doctorId is required!" });
+      }
+
+      try {
+        // upsert: doctorId দিয়ে আগে খোঁজে — থাকলে update, না থাকলে insert
+        const result = await doctorsCollection.findOneAndUpdate(
+          { doctorId: doctorId },
+          {
+            $set: { ...rest, doctorId, updatedAt: new Date().toISOString() },
+            $setOnInsert: { createdAt: new Date() }
+          },
+          { upsert: true, returnDocument: "after" }
+        );
+
+        res.json({ success: true, message: "Doctor profile saved successfully!", result });
+      } catch (error) {
+        console.error("Doctor upsert error:", error);
+        res.status(500).json({ success: false, message: error.message });
+      }
+    })
+
+    // ADMIN: Update Doctor Verification Status — must be BEFORE /:id to avoid route conflict
+    app.patch("/api/doctors/verify/:id", async (req, res) => {
+      const { id } = req.params;
+      const { verificationStatus } = req.body;
+
+      if (!ObjectId.isValid(id)) {
+        return res.status(400).json({ success: false, message: "Invalid Doctor ID!" });
+      }
+
+      if (!verificationStatus) {
+        return res.status(400).json({ success: false, message: "verificationStatus is required!" });
+      }
+
+      const result = await doctorsCollection.updateOne(
+        { _id: new ObjectId(id) },
+        {
+          $set: {
+            verificationStatus: verificationStatus,
+            updatedAt: new Date()
+          }
+        }
+      );
+
+      if (result.matchedCount === 0) {
+        return res.status(404).json({ success: false, message: "Doctor not found!" });
+      }
+
+      res.json({
+        success: true,
+        message: `Doctor status updated to ${verificationStatus} successfully!`,
+        result
+      });
+    });
+
+    // PATCH: Direct update by doctor profile _id (must be AFTER /verify/:id)
+    app.patch("/api/doctors/:id", async (req, res) => {
+      const { id } = req.params;
+      const updateData = req.body;
+
+      if (!ObjectId.isValid(id)) {
+        return res.status(400).json({ success: false, message: "Invalid Doctor ID!" });
+      }
+
+      const result = await doctorsCollection.updateOne(
+        { _id: new ObjectId(id) },
+        { $set: { ...updateData, updatedAt: new Date().toISOString() } }
+      );
+
+      if (result.matchedCount === 0) {
+        return res.status(404).json({ success: false, message: "Doctor not found!" });
+      }
+
+      res.json({ success: true, message: "Doctor profile updated successfully!", result });
     })
 
     app.get("/api/schedules", async (req, res) => {
@@ -221,39 +346,7 @@ async function run() {
       res.json({ success: true, message: "Schedule deleted successfully!", result });
     });
 
-    // ADMIN: Update Doctor Verification Status (Verify / Reject / Pending)
-    app.patch("/api/doctors/verify/:id", async (req, res) => {
-      const { id } = req.params;
-      const { verificationStatus } = req.body;
 
-      if (!ObjectId.isValid(id)) {
-        return res.status(400).json({ success: false, message: "Invalid Doctor ID!" });
-      }
-
-      if (!verificationStatus) {
-        return res.status(400).json({ success: false, message: "verificationStatus is required!" });
-      }
-
-      const result = await doctorsCollection.updateOne(
-        { _id: new ObjectId(id) },
-        {
-          $set: {
-            verificationStatus: verificationStatus,
-            updatedAt: new Date()
-          }
-        }
-      );
-
-      if (result.matchedCount === 0) {
-        return res.status(404).json({ success: false, message: "Doctor not found!" });
-      }
-
-      res.json({
-        success: true,
-        message: `Doctor status updated to ${verificationStatus} successfully!`,
-        result
-      });
-    });
 
 
     // Send a ping to confirm a successful connection
