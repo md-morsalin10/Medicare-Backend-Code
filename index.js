@@ -302,6 +302,22 @@ async function run() {
       }
     });
 
+
+
+    app.get("/api/reviews", async (req, res) => {
+      const query = {};
+      if (req.query.doctorId) {
+        query.doctorId = req.query.doctorId;
+      }
+      if (req.query.patientId) {
+        query.patientId = req.query.patientId;
+      }
+
+      const result = await reviewsCollection.find(query).sort({ createdAt: -1 }).toArray();
+      res.json(result);
+    })
+
+
     // POST: Create a review for a doctor
     app.post("/api/reviews", async (req, res) => {
       const {
@@ -334,6 +350,58 @@ async function run() {
         res.json({ success: true, message: "Review submitted successfully!", result });
       } catch (error) {
         console.error("Review creation error:", error);
+        res.status(500).json({ success: false, message: error.message });
+      }
+    });
+
+    // PATCH: Update a review
+    app.patch("/api/reviews/:id", async (req, res) => {
+      const { id } = req.params;
+      const { rating, reviewText } = req.body;
+
+      if (!ObjectId.isValid(id)) {
+        return res.status(400).json({ success: false, message: "Invalid review ID!" });
+      }
+
+      const updateData = { updatedAt: new Date() };
+      if (rating !== undefined) updateData.rating = Number(rating);
+      if (reviewText !== undefined) updateData.reviewText = reviewText;
+
+      try {
+        const result = await reviewsCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: updateData }
+        );
+
+        if (result.matchedCount === 0) {
+          return res.status(404).json({ success: false, message: "Review not found!" });
+        }
+
+        res.json({ success: true, message: "Review updated successfully!", result });
+      } catch (error) {
+        console.error("Review update error:", error);
+        res.status(500).json({ success: false, message: error.message });
+      }
+    });
+
+    // DELETE: Delete a review
+    app.delete("/api/reviews/:id", async (req, res) => {
+      const { id } = req.params;
+
+      if (!ObjectId.isValid(id)) {
+        return res.status(400).json({ success: false, message: "Invalid review ID!" });
+      }
+
+      try {
+        const result = await reviewsCollection.deleteOne({ _id: new ObjectId(id) });
+
+        if (result.deletedCount === 0) {
+          return res.status(404).json({ success: false, message: "Review not found!" });
+        }
+
+        res.json({ success: true, message: "Review deleted successfully!", result });
+      } catch (error) {
+        console.error("Review deletion error:", error);
         res.status(500).json({ success: false, message: error.message });
       }
     });
