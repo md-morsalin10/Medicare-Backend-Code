@@ -35,6 +35,7 @@ async function run() {
     const schedulesCollection = database.collection("schedules");
     const doctorPaymentsCollection = database.collection("doctorPayments");
     const prescriptionsCollection = database.collection("prescriptions");
+    const reviewsCollection = database.collection("reviews");
 
 
     app.get("/api/users", async (req, res) => {
@@ -299,6 +300,42 @@ async function run() {
         res.json({ success: true, message: "Prescription updated successfully!", result });
       } catch (error) {
         console.error("Prescription update error:", error);
+        res.status(500).json({ success: false, message: error.message });
+      }
+    });
+
+    // POST: Create a review for a doctor
+    app.post("/api/reviews", async (req, res) => {
+      const {
+        doctorId,
+        doctorName,
+        patientId,
+        patientName,
+        patientImage,
+        rating,
+        reviewText
+      } = req.body;
+
+      if (!doctorId || !patientId || !rating) {
+        return res.status(400).json({ success: false, message: "Missing required review fields!" });
+      }
+
+      try {
+        const newReview = {
+          doctorId,
+          doctorName,
+          patientId,
+          patientName,
+          patientImage: patientImage || "",
+          rating: Number(rating),
+          reviewText: reviewText || "",
+          createdAt: new Date()
+        };
+
+        const result = await reviewsCollection.insertOne(newReview);
+        res.json({ success: true, message: "Review submitted successfully!", result });
+      } catch (error) {
+        console.error("Review creation error:", error);
         res.status(500).json({ success: false, message: error.message });
       }
     });
