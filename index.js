@@ -146,59 +146,57 @@ async function run() {
       });
     });
 
-    // ── Update Appointment Booking Status (Accept / Reject) ──
+    // ── Update Appointment Booking (status / reschedule date+time) ──
     app.patch("/api/bookings/:id", async (req, res) => {
       const { id } = req.params;
-      const { status } = req.body;
+      const { status, appointmentDate, appointmentTime } = req.body;
 
       if (!ObjectId.isValid(id)) {
         return res.status(400).json({ success: false, message: "Invalid Booking ID!" });
       }
 
-      if (!status) {
-        return res.status(400).json({ success: false, message: "Status is required!" });
-      }
+      const updateFields = { updatedAt: new Date() };
+      if (status) updateFields.status = status;
+      if (appointmentDate) updateFields.appointmentDate = appointmentDate;
+      if (appointmentTime) updateFields.appointmentTime = appointmentTime;
 
       try {
         const result = await doctorPaymentsCollection.updateOne(
           { _id: new ObjectId(id) },
-          { $set: { status: status, updatedAt: new Date() } }
+          { $set: updateFields }
         );
 
         if (result.matchedCount === 0) {
           return res.status(404).json({ success: false, message: "Booking record not found!" });
         }
 
-        res.json({
-          success: true,
-          message: `Appointment status updated to ${status} successfully!`,
-          result
-        });
+        res.json({ success: true, message: "Booking updated successfully!", result });
       } catch (error) {
-        console.error("Error updating booking status:", error);
+        console.error("Error updating booking:", error);
         res.status(500).json({ success: false, message: "Internal server error" });
       }
     });
 
-    // PATCH: Update booking status (Confirmed / Cancelled / Completed)
-    app.patch("/api/bookings/:id", async (req, res) => {
+    // ── Delete a Booking ──
+    app.delete("/api/bookings/:id", async (req, res) => {
       const { id } = req.params;
-      const { status } = req.body;
 
       if (!ObjectId.isValid(id)) {
-        return res.status(400).json({ success: false, message: "Invalid booking ID!" });
+        return res.status(400).json({ success: false, message: "Invalid Booking ID!" });
       }
 
-      const result = await doctorPaymentsCollection.updateOne(
-        { _id: new ObjectId(id) },
-        { $set: { status, updatedAt: new Date() } }
-      );
+      try {
+        const result = await doctorPaymentsCollection.deleteOne({ _id: new ObjectId(id) });
 
-      if (result.matchedCount === 0) {
-        return res.status(404).json({ success: false, message: "Booking not found!" });
+        if (result.deletedCount === 0) {
+          return res.status(404).json({ success: false, message: "Booking not found!" });
+        }
+
+        res.json({ success: true, message: "Booking deleted successfully!", result });
+      } catch (error) {
+        console.error("Error deleting booking:", error);
+        res.status(500).json({ success: false, message: "Internal server error" });
       }
-
-      res.json({ success: true, message: "Booking status updated!", result });
     });
 
 
