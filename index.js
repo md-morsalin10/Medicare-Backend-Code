@@ -33,6 +33,7 @@ async function run() {
     const usersCollection = database.collection("user");
     const doctorsCollection = database.collection("doctors");
     const schedulesCollection = database.collection("schedules");
+    const doctorPaymentsCollection = database.collection("doctorPayments");
 
 
     app.get("/api/users", async (req, res) => {
@@ -59,6 +60,69 @@ async function run() {
       const result = await doctorsCollection.findOne(query)
       res.json(result)
     })
+
+    app.post("/api/bookings", async (req, res) => {
+      const {
+        doctorId,
+        doctorName,
+        doctorEmail,
+        doctorFee,
+        patientId,
+        patientName,
+        patientEmail,
+        patientImage,
+        appointmentDate,
+        appointmentTime,
+        symptoms,
+        bookingStatus,
+        stripeSessionId
+      } = req.body;
+
+      if (!doctorId || !patientEmail || !appointmentDate || !appointmentTime) {
+        return res.status(400).json({
+          success: false,
+          message: "Missing required booking fields!"
+        });
+      }
+
+      
+      if (stripeSessionId) {
+        const existingPayment = await doctorPaymentsCollection.findOne({ stripeSessionId });
+        if (existingPayment) {
+          return res.json({
+            success: true,
+            message: "Payment already recorded!",
+            result: existingPayment
+          });
+        }
+      }
+
+      // ডাটাবেজে সেভ করার অবজেক্ট
+      const newPaymentRecord = {
+        doctorId,
+        doctorName,
+        doctorEmail,
+        doctorFee: Number(doctorFee),
+        patientId,
+        patientName,
+        patientEmail,
+        patientImage,
+        appointmentDate,
+        appointmentTime,
+        symptoms: symptoms || "N/A",
+        paymentStatus: bookingStatus || "Paid",
+        stripeSessionId: stripeSessionId || null,
+        createdAt: new Date()
+      };
+
+      const result = await doctorPaymentsCollection.insertOne(newPaymentRecord);
+
+      res.json({
+        success: true,
+        message: "Payment recorded successfully!",
+        result
+      });
+    });
 
     app.post("/api/doctors", async (req, res) => {
       const doctor = req.body
