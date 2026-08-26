@@ -148,7 +148,7 @@ async function run() {
     // ── Update Appointment Booking Status (Accept / Reject) ──
     app.patch("/api/bookings/:id", async (req, res) => {
       const { id } = req.params;
-      const { status } = req.body; 
+      const { status } = req.body;
 
       if (!ObjectId.isValid(id)) {
         return res.status(400).json({ success: false, message: "Invalid Booking ID!" });
@@ -198,6 +198,24 @@ async function run() {
       }
 
       res.json({ success: true, message: "Booking status updated!", result });
+    });
+
+
+
+    app.get("/api/prescriptions", async (req, res) => {
+      const query = {};
+      if (req.query.doctorId) {
+        query.doctorId = req.query.doctorId;
+      }
+      if (req.query.patientId) {
+        query.patientId = req.query.patientId;
+      }
+      if (req.query.appointmentId) {
+        query.appointmentId = req.query.appointmentId;
+      }
+
+      const result = await prescriptionsCollection.find(query).sort({ createdAt: -1 }).toArray();
+      res.json(result);
     });
 
     // POST: Create a prescription
@@ -253,15 +271,36 @@ async function run() {
       }
     });
 
-    // GET: Fetch prescriptions (by doctorId or patientId)
-    app.get("/api/prescriptions", async (req, res) => {
-      const query = {};
-      if (req.query.doctorId) query.doctorId = req.query.doctorId;
-      if (req.query.patientId) query.patientId = req.query.patientId;
-      if (req.query.appointmentId) query.appointmentId = req.query.appointmentId;
+    // PATCH: Update a prescription
+    app.patch("/api/prescriptions/:id", async (req, res) => {
+      const { id } = req.params;
+      const { diagnosis, medicines, notes } = req.body;
 
-      const result = await prescriptionsCollection.find(query).sort({ createdAt: -1 }).toArray();
-      res.json(result);
+      if (!ObjectId.isValid(id)) {
+        return res.status(400).json({ success: false, message: "Invalid prescription ID!" });
+      }
+
+      const updateData = {};
+      if (diagnosis !== undefined) updateData.diagnosis = diagnosis;
+      if (medicines !== undefined) updateData.medicines = medicines;
+      if (notes !== undefined) updateData.notes = notes;
+      updateData.updatedAt = new Date();
+
+      try {
+        const result = await prescriptionsCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: updateData }
+        );
+
+        if (result.matchedCount === 0) {
+          return res.status(404).json({ success: false, message: "Prescription not found!" });
+        }
+
+        res.json({ success: true, message: "Prescription updated successfully!", result });
+      } catch (error) {
+        console.error("Prescription update error:", error);
+        res.status(500).json({ success: false, message: error.message });
+      }
     });
 
     app.post("/api/doctors", async (req, res) => {
