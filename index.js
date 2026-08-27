@@ -43,6 +43,45 @@ async function run() {
       res.send(result)
     })
 
+    // UPDATE USER (Suspend)
+    app.patch("/api/users/:id", async (req, res) => {
+      const { id } = req.params;
+      const { isSuspended } = req.body;
+      
+      try {
+        let result = await usersCollection.updateOne({ id: id }, { $set: { isSuspended, updatedAt: new Date() } });
+        if (result.matchedCount === 0) {
+           result = await usersCollection.updateOne(
+             { _id: ObjectId.isValid(id) ? new ObjectId(id) : id },
+             { $set: { isSuspended, updatedAt: new Date() } }
+           );
+        }
+        if (result.matchedCount === 0) {
+          return res.status(404).json({ success: false, message: "User not found!" });
+        }
+        res.json({ success: true, message: `User suspension status updated to ${isSuspended}` });
+      } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+      }
+    });
+
+    // DELETE USER
+    app.delete("/api/users/:id", async (req, res) => {
+      const { id } = req.params;
+      try {
+        let result = await usersCollection.deleteOne({ id: id });
+        if (result.deletedCount === 0) {
+          result = await usersCollection.deleteOne({ _id: ObjectId.isValid(id) ? new ObjectId(id) : id });
+        }
+        if (result.deletedCount === 0) {
+          return res.status(404).json({ success: false, message: "User not found!" });
+        }
+        res.json({ success: true, message: "User deleted successfully!" });
+      } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+      }
+    });
+
 
     app.get("/api/doctors", async (req, res) => {
       const query = {}
