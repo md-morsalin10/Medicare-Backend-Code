@@ -5,6 +5,7 @@ const dotenv = require('dotenv');
 dotenv.config();
 
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
+const { createRemoteJWKSet, jwtVerify } = require('jose-cjs');
 const port = process.env.PORT || 5000;
 
 // Middleware
@@ -21,6 +22,31 @@ const client = new MongoClient(uri, {
     deprecationErrors: true,
   }
 });
+
+
+const JWKS = createRemoteJWKSet(new URL(`${process.env.CLIENT_URL}/api/auth/jwks`));
+
+const verifyToken = async (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  // console.log(authHeader, "authHeader");
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).send({ message: 'Missing or invalid authorization header' });
+  }
+  const token = authHeader.split(' ')[1];
+  // console.log(token, "token");
+  try {
+    const { payload } = await jwtVerify(token, JWKS);
+    req.user = payload;
+    // console.log(payload, "payload");
+    next();
+
+
+  } catch (err) {
+    // console.log(err, "err");
+    res.status(401).send({ message: 'Invalid token' });
+  }
+
+}
 
 async function run() {
   try {
@@ -47,14 +73,14 @@ async function run() {
     app.patch("/api/users/:id", async (req, res) => {
       const { id } = req.params;
       const { isSuspended } = req.body;
-      
+
       try {
         let result = await usersCollection.updateOne({ id: id }, { $set: { isSuspended, updatedAt: new Date() } });
         if (result.matchedCount === 0) {
-           result = await usersCollection.updateOne(
-             { _id: ObjectId.isValid(id) ? new ObjectId(id) : id },
-             { $set: { isSuspended, updatedAt: new Date() } }
-           );
+          result = await usersCollection.updateOne(
+            { _id: ObjectId.isValid(id) ? new ObjectId(id) : id },
+            { $set: { isSuspended, updatedAt: new Date() } }
+          );
         }
         if (result.matchedCount === 0) {
           return res.status(404).json({ success: false, message: "User not found!" });
@@ -358,7 +384,7 @@ async function run() {
 
 
     // POST: Create a review for a doctor
-    app.post("/api/reviews", async (req, res) => {
+    app.post("/api/reviews", verifyToken, async (req, res) => {
       const {
         doctorId,
         doctorName,
