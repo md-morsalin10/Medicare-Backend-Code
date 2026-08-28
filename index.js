@@ -128,7 +128,7 @@ async function run() {
       res.json(result)
     })
 
-    app.get("/api/bookings", async (req, res) => {
+    app.get("/api/bookings",verifyToken, async (req, res) => {
       const query = {};
 
       if (req.query.doctorId) {
@@ -146,7 +146,7 @@ async function run() {
 
     })
 
-    app.post("/api/bookings", async (req, res) => {
+    app.post("/api/bookings", verifyToken, async (req, res) => {
       const {
         doctorId,
         doctorName,
@@ -471,7 +471,7 @@ async function run() {
       }
     });
 
-    app.post("/api/doctors", async (req, res) => {
+    app.post("/api/doctors",verifyToken, async (req, res) => {
       const doctor = req.body;
       const { doctorId, ...rest } = doctor;
 
@@ -561,7 +561,7 @@ async function run() {
       res.json(result);
     });
 
-    app.post("/api/schedules", async (req, res) => {
+    app.post("/api/schedules", verifyToken, async (req, res) => {
       const { doctorId, date, timeSlot, maxPatients, doctorEmail } = req.body;
 
       if (!doctorId || !date || !timeSlot) {
