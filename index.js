@@ -28,25 +28,56 @@ const JWKS = createRemoteJWKSet(new URL(`${process.env.CLIENT_URL}/api/auth/jwks
 
 const verifyToken = async (req, res, next) => {
   const authHeader = req.headers.authorization;
-  // console.log(authHeader, "authHeader");
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return res.status(401).send({ message: 'Missing or invalid authorization header' });
   }
   const token = authHeader.split(' ')[1];
-  // console.log(token, "token");
   try {
     const { payload } = await jwtVerify(token, JWKS);
     req.user = payload;
-    // console.log(payload, "payload");
     next();
-
-
   } catch (err) {
     // console.log(err, "err");
     res.status(401).send({ message: 'Invalid token' });
   }
-
 }
+
+const verifyPatient = (req, res, next) => {
+  const user = req.user;
+
+  if (user?.role !== "patient") {
+    return res.status(403).json({
+      message: "Forbidden access you are not seller"
+    });
+  }
+
+  next();
+};
+
+const verifyDoctor = (req, res, next) => {
+  const user = req.user;
+
+  if (user?.role !== "doctor") {
+    return res.status(403).json({
+      message: "Forbidden access you are not seller"
+    });
+  }
+
+  next();
+};
+
+const verifyAdmin = (req, res, next) => {
+  const user = req.user;
+
+  if (user?.role !== "admin") {
+    return res.status(403).json({
+      message: "Forbidden access you are not seller"
+    });
+  }
+
+  next();
+};
+
 
 async function run() {
   try {
@@ -128,7 +159,7 @@ async function run() {
       res.json(result)
     })
 
-    app.get("/api/bookings",verifyToken, async (req, res) => {
+    app.get("/api/bookings", verifyToken, async (req, res) => {
       const query = {};
 
       if (req.query.doctorId) {
@@ -211,8 +242,8 @@ async function run() {
       });
     });
 
-    // ── Update Appointment Booking (status / reschedule date+time) ──
-    app.patch("/api/bookings/:id", async (req, res) => {
+    // ── Update Appointment Booking (status / reschedule date+time) ── patient, doctor
+    app.patch("/api/bookings/:id", verifyToken, async (req, res) => {
       const { id } = req.params;
       const { status, appointmentDate, appointmentTime } = req.body;
 
@@ -242,8 +273,8 @@ async function run() {
       }
     });
 
-    // ── Delete a Booking ──
-    app.delete("/api/bookings/:id", async (req, res) => {
+    // ── Delete a Booking ── [Patient]
+    app.delete("/api/bookings/:id", verifyToken, async (req, res) => {
       const { id } = req.params;
 
       if (!ObjectId.isValid(id)) {
@@ -266,7 +297,7 @@ async function run() {
 
 
 
-    app.get("/api/prescriptions", async (req, res) => {
+    app.get("/api/prescriptions", verifyToken, async (req, res) => {
       const query = {};
       if (req.query.doctorId) {
         query.doctorId = req.query.doctorId;
@@ -282,8 +313,8 @@ async function run() {
       res.json(result);
     });
 
-    // POST: Create a prescription
-    app.post("/api/prescriptions", async (req, res) => {
+    // POST: Create a prescription doctor
+    app.post("/api/prescriptions", verifyToken, verifyDoctor, async (req, res) => {
       const {
         appointmentId,
         doctorId,
@@ -336,7 +367,7 @@ async function run() {
     });
 
     // PATCH: Update a prescription
-    app.patch("/api/prescriptions/:id", async (req, res) => {
+    app.patch("/api/prescriptions/:id", verifyToken, verifyDoctor, async (req, res) => {
       const { id } = req.params;
       const { diagnosis, medicines, notes } = req.body;
 
@@ -369,7 +400,7 @@ async function run() {
 
 
 
-    app.get("/api/reviews", async (req, res) => {
+    app.get("/api/reviews", verifyToken, async (req, res) => {
       const query = {};
       if (req.query.doctorId) {
         query.doctorId = req.query.doctorId;
@@ -384,7 +415,7 @@ async function run() {
 
 
     // POST: Create a review for a doctor
-    app.post("/api/reviews", verifyToken, async (req, res) => {
+    app.post("/api/reviews", verifyToken, verifyPatient, async (req, res) => {
       const {
         doctorId,
         doctorName,
@@ -419,8 +450,8 @@ async function run() {
       }
     });
 
-    // PATCH: Update a review
-    app.patch("/api/reviews/:id", async (req, res) => {
+    // PATCH: Update a review patient
+    app.patch("/api/reviews/:id", verifyToken, verifyPatient, async (req, res) => {
       const { id } = req.params;
       const { rating, reviewText } = req.body;
 
@@ -449,8 +480,8 @@ async function run() {
       }
     });
 
-    // DELETE: Delete a review
-    app.delete("/api/reviews/:id", async (req, res) => {
+    // DELETE: Delete a review patient
+    app.delete("/api/reviews/:id", verifyToken, async (req, res) => {
       const { id } = req.params;
 
       if (!ObjectId.isValid(id)) {
@@ -471,7 +502,7 @@ async function run() {
       }
     });
 
-    app.post("/api/doctors",verifyToken, async (req, res) => {
+    app.post("/api/doctors", verifyToken, async (req, res) => {
       const doctor = req.body;
       const { doctorId, ...rest } = doctor;
 
@@ -497,8 +528,9 @@ async function run() {
       }
     })
 
+    //  admin only
     // ADMIN: Update Doctor Verification Status — must be BEFORE /:id to avoid route conflict
-    app.patch("/api/doctors/verify/:id", async (req, res) => {
+    app.patch("/api/doctors/verify/:id", verifyToken, verifyAdmin, async (req, res) => {
       const { id } = req.params;
       const { verificationStatus } = req.body;
 
@@ -532,7 +564,7 @@ async function run() {
     });
 
     // PATCH: Direct update by doctor profile _id (must be AFTER /verify/:id)
-    app.patch("/api/doctors/:id", async (req, res) => {
+    app.patch("/api/doctors/:id", verifyToken, verifyDoctor, async (req, res) => {
       const { id } = req.params;
       const updateData = req.body;
 
@@ -595,8 +627,8 @@ async function run() {
       res.json({ success: true, message: "Schedule created successfully!", result });
     });
 
-    // ── Update Schedule by ID ──
-    app.patch("/api/schedules/:id", async (req, res) => {
+    // ── Update Schedule by ID ── doctor
+    app.patch("/api/schedules/:id", verifyToken, async (req, res) => {
       const { id } = req.params;
       const { date, timeSlot, maxPatients } = req.body;
 
@@ -622,8 +654,8 @@ async function run() {
       res.json({ success: true, message: "Schedule updated successfully!", result });
     });
 
-    // ── Delete Schedule by ID ──
-    app.delete("/api/schedules/:id", async (req, res) => {
+    // ── Delete Schedule by ID ── doctor
+    app.delete("/api/schedules/:id", verifyToken, async (req, res) => {
       const { id } = req.params;
 
       if (!ObjectId.isValid(id)) {
