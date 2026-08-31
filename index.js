@@ -24,7 +24,12 @@ const client = new MongoClient(uri, {
 });
 
 
-const JWKS = createRemoteJWKSet(new URL(`${process.env.CLIENT_URL}/api/auth/jwks`));
+const CLIENT_URL =
+  process.env.CLIENT_URL ||
+  process.env.NEXT_PUBLIC_BETTER_AUTH_URL ||
+  "http://localhost:3000";
+
+const JWKS = createRemoteJWKSet(new URL(`${CLIENT_URL}/api/auth/jwks`));
 
 const verifyToken = async (req, res, next) => {
   const authHeader = req.headers.authorization;
@@ -47,7 +52,7 @@ const verifyPatient = (req, res, next) => {
 
   if (user?.role !== "patient") {
     return res.status(403).json({
-      message: "Forbidden access you are not seller"
+      message: "Forbidden access you are not patient"
     });
   }
 
@@ -56,10 +61,10 @@ const verifyPatient = (req, res, next) => {
 
 const verifyDoctor = (req, res, next) => {
   const user = req.user;
-
+  console.log(user, "backend")
   if (user?.role !== "doctor") {
     return res.status(403).json({
-      message: "Forbidden access you are not seller"
+      message: "Forbidden access you are not doctor"
     });
   }
 
@@ -68,10 +73,11 @@ const verifyDoctor = (req, res, next) => {
 
 const verifyAdmin = (req, res, next) => {
   const user = req.user;
+  console.log(user, "backend")
 
   if (user?.role !== "admin") {
     return res.status(403).json({
-      message: "Forbidden access you are not seller"
+      message: "Forbidden access you are not admin"
     });
   }
 
@@ -82,8 +88,8 @@ const verifyAdmin = (req, res, next) => {
 async function run() {
   try {
     // Connect the client to the server
-    await client.connect();
-    console.log("Successfully connected to MongoDB!");
+    // await client.connect();
+    // console.log("Successfully connected to MongoDB!");
 
     // Database and Collections
     const database = client.db("Medicare");
@@ -159,7 +165,7 @@ async function run() {
       res.json(result)
     })
 
-    app.get("/api/bookings", verifyToken, async (req, res) => {
+    app.get("/api/bookings",  async (req, res) => {
       const query = {};
 
       if (req.query.doctorId) {
@@ -675,7 +681,7 @@ async function run() {
 
 
     // Send a ping to confirm a successful connection
-    await client.db("admin").command({ ping: 1 });
+    // await client.db("admin").command({ ping: 1 });
     console.log("Pinged your deployment. Connected to MongoDB Admin!");
 
   } catch (error) {
