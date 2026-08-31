@@ -165,7 +165,7 @@ async function run() {
       res.json(result)
     })
 
-    app.get("/api/bookings",  async (req, res) => {
+    app.get("/api/bookings",verifyToken,  async (req, res) => {
       const query = {};
 
       if (req.query.doctorId) {
