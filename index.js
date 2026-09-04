@@ -151,16 +151,31 @@ async function run() {
 
       if (req.query.doctorId) {
         query.doctorId = req.query.doctorId;
+        const result = await doctorsCollection.find(query).toArray()
+        return res.json(result)
       }
 
-      const result = await doctorsCollection.find(query).toArray()
+      // Optimization: Only fetch necessary fields for the list view to reduce payload size significantly.
+      // This solves the issue of slow loading when there are many doctors or large base64 images.
+      const projection = {
+        doctorName: 1,
+        specialization: 1,
+        consultationFee: 1,
+        experience: 1,
+        verificationStatus: 1,
+        profileImage: 1,
+        qualifications: 1,
+        hospitalName: 1
+      };
+
+      const result = await doctorsCollection.find(query).project(projection).toArray()
       res.json(result)
 
     })
 
     app.get("/api/features/doctors", async (req, res) => {
       const query = {};
-      const doctors = await doctorsCollection.find(query).limit(8).sort({ createdAt: -1 }).toArray();
+      const doctors = await doctorsCollection.find(query).limit(4).sort({ createdAt: -1 }).toArray();
       res.send(doctors);
     })
 
